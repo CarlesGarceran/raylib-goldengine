@@ -1092,6 +1092,69 @@ void DrawGrid(int slices, float spacing)
     rlEnd();
 }
 
+AsyncModel LoadModelAsync(const char *fileName)
+{
+    AsyncModel asyncModel = { 0 };
+    asyncModel.loaded = false;
+    Model model = { 0 };
+
+#if defined(SUPPORT_FILEFORMAT_OBJ)
+    if (IsFileExtension(fileName, ".obj")) model = LoadOBJ(fileName, false);
+#endif
+#if defined(SUPPORT_FILEFORMAT_IQM)
+    if (IsFileExtension(fileName, ".iqm")) model = LoadIQM(fileName);
+#endif
+#if defined(SUPPORT_FILEFORMAT_GLTF)
+    if (IsFileExtension(fileName, ".gltf") || IsFileExtension(fileName, ".glb")) model = LoadGLTF(fileName);
+#endif
+#if defined(SUPPORT_FILEFORMAT_VOX)
+    if (IsFileExtension(fileName, ".vox")) model = LoadVOX(fileName);
+#endif
+#if defined(SUPPORT_FILEFORMAT_M3D)
+    if (IsFileExtension(fileName, ".m3d")) model = LoadM3D(fileName);
+#endif
+
+    // Make sure model transform is set to identity matrix!
+    model.transform = MatrixIdentity();
+
+    if ((model.meshCount != 0) && (model.meshes != NULL))
+    {
+
+    }
+    else TRACELOG(LOG_WARNING, "MESH: [%s] Failed to load model mesh(es) data", fileName);
+
+    if (model.materialCount == 0)
+    {
+        TRACELOG(LOG_WARNING, "MATERIAL: [%s] Failed to load model material data, default to white material", fileName);
+
+        model.materialCount = 1;
+        model.materials = (Material *)RL_CALLOC(model.materialCount, sizeof(Material));
+        model.materials[0] = LoadMaterialDefault();
+
+        if (model.meshMaterial == NULL) model.meshMaterial = (int *)RL_CALLOC(model.meshCount, sizeof(int));
+    }
+
+    asyncModel.model = model;
+    asyncModel.uploadedToGPU = false;
+    asyncModel.loaded = true;
+
+    return asyncModel;
+}
+
+void UploadAsyncModelToGPU(AsyncModel* model)
+{
+    if (model == 0) return;
+
+    if (!model->uploadedToGPU)
+    {
+        for (int x = 0; x < model->model.meshCount; x++) UploadMesh(&model->model.meshes[x], true);
+    }
+    else
+    {
+        TraceLog(LOG_WARNING, "Model is already uploaded to GPU");
+    }
+}
+
 // Load model from files (mesh and material)
 Model LoadModel(const char *fileName)
 {

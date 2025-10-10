@@ -455,6 +455,12 @@ typedef struct Wave {
     void *data;                 // Buffer data pointer
 } Wave;
 
+typedef struct AsyncModel {
+    Model model;
+    bool uploadedToGPU;
+    bool loaded;
+} AsyncModel;
+
 // Opaque structs declaration
 // NOTE: Actual structs are defined internally in raudio module
 typedef struct rAudioBuffer rAudioBuffer;
@@ -1569,11 +1575,16 @@ RLAPI void DrawGrid(int slices, float spacing);                                 
 //------------------------------------------------------------------------------------
 
 // Model management functions
+RLAPI AsyncModel LoadModelAsync(const char* fileName);
 RLAPI Model LoadModel(const char *fileName);                                                // Load model from files (meshes and materials)
 RLAPI Model LoadModelFromMesh(Mesh mesh);                                                   // Load model from generated mesh (default material)
 RLAPI bool IsModelValid(Model model);                                                       // Check if a model is valid (loaded in GPU, VAO/VBOs)
 RLAPI void UnloadModel(Model model);                                                        // Unload model (including meshes) from memory (RAM and/or VRAM)
 RLAPI BoundingBox GetModelBoundingBox(Model model);                                         // Compute model bounding box limits (considers all meshes)
+
+// ASYNC LOADING
+
+RLAPI void UploadAsyncModelToGPU(AsyncModel* model);
 
 // Model drawing functions
 RLAPI void DrawModel(Model model, Vector3 position, float scale, Color tint);               // Draw a model (with texture if set)
