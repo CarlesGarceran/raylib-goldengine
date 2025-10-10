@@ -1,3 +1,9 @@
+This Version isn't supposed to be used as like the original Raylib, this version is a fork for the game engine GoldEngine and adds extra functionalities.
+If you rather to use the original version check out: https://github.com/raysan5/raylib.
+Cheers!
+
+---
+
 <img align="left" style="width:260px" src="https://github.com/raysan5/raylib/blob/master/logo/raylib_logo_animation.gif" width="288px">
 
 **raylib is a simple and easy-to-use library to enjoy videogames programming.**
