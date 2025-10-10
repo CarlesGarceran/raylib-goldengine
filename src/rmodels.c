@@ -147,7 +147,7 @@
 // Module specific Functions Declaration
 //----------------------------------------------------------------------------------
 #if defined(SUPPORT_FILEFORMAT_OBJ)
-static Model LoadOBJ(const char *fileName);     // Load OBJ mesh data
+static Model LoadOBJ(const char *fileName, bool uploadToGPU);     // Load OBJ mesh data
 #endif
 #if defined(SUPPORT_FILEFORMAT_IQM)
 static Model LoadIQM(const char *fileName);     // Load IQM mesh data
@@ -1094,12 +1094,12 @@ void DrawGrid(int slices, float spacing)
 }
 
 // Load model from files (mesh and material)
-Model LoadModel(const char *fileName)
+Model LoadModel(const char* fileName)
 {
     Model model = { 0 };
 
 #if defined(SUPPORT_FILEFORMAT_OBJ)
-    if (IsFileExtension(fileName, ".obj")) model = LoadOBJ(fileName);
+    if (IsFileExtension(fileName, ".obj")) model = LoadOBJ(fileName, true);
 #endif
 #if defined(SUPPORT_FILEFORMAT_IQM)
     if (IsFileExtension(fileName, ".iqm")) model = LoadIQM(fileName);
@@ -1129,13 +1129,63 @@ Model LoadModel(const char *fileName)
         TRACELOG(LOG_WARNING, "MATERIAL: [%s] Failed to load model material data, default to white material", fileName);
 
         model.materialCount = 1;
+        model.materials = (Material*)RL_CALLOC(model.materialCount, sizeof(Material));
+        model.materials[0] = LoadMaterialDefault();
+
+        if (model.meshMaterial == NULL) model.meshMaterial = (int*)RL_CALLOC(model.meshCount, sizeof(int));
+    }
+
+    return model;
+}
+
+// Load model from files (mesh and material)
+AsyncModel LoadModelAsync(const char *fileName)
+{
+    AsyncModel asyncModel = { 0 };
+    asyncModel.loaded = false;
+    Model model = { 0 };
+
+#if defined(SUPPORT_FILEFORMAT_OBJ)
+    if (IsFileExtension(fileName, ".obj")) model = LoadOBJ(fileName, false);
+#endif
+#if defined(SUPPORT_FILEFORMAT_IQM)
+    if (IsFileExtension(fileName, ".iqm")) model = LoadIQM(fileName);
+#endif
+#if defined(SUPPORT_FILEFORMAT_GLTF)
+    if (IsFileExtension(fileName, ".gltf") || IsFileExtension(fileName, ".glb")) model = LoadGLTF(fileName);
+#endif
+#if defined(SUPPORT_FILEFORMAT_VOX)
+    if (IsFileExtension(fileName, ".vox")) model = LoadVOX(fileName);
+#endif
+#if defined(SUPPORT_FILEFORMAT_M3D)
+    if (IsFileExtension(fileName, ".m3d")) model = LoadM3D(fileName);
+#endif
+
+    // Make sure model transform is set to identity matrix!
+    model.transform = MatrixIdentity();
+
+    if ((model.meshCount != 0) && (model.meshes != NULL))
+    {
+
+    }
+    else TRACELOG(LOG_WARNING, "MESH: [%s] Failed to load model mesh(es) data", fileName);
+
+    if (model.materialCount == 0)
+    {
+        TRACELOG(LOG_WARNING, "MATERIAL: [%s] Failed to load model material data, default to white material", fileName);
+
+        model.materialCount = 1;
         model.materials = (Material *)RL_CALLOC(model.materialCount, sizeof(Material));
         model.materials[0] = LoadMaterialDefault();
 
         if (model.meshMaterial == NULL) model.meshMaterial = (int *)RL_CALLOC(model.meshCount, sizeof(int));
     }
 
-    return model;
+    asyncModel.model = model;
+    asyncModel.uploadedToGPU = false;
+    asyncModel.loaded = true;
+
+    return asyncModel;
 }
 
 // Load model from generated mesh
@@ -1160,6 +1210,20 @@ Model LoadModelFromMesh(Mesh mesh)
     model.meshMaterial[0] = 0;  // First material index
 
     return model;
+}
+
+void UploadAsyncModelToGPU(AsyncModel* model)
+{
+    if (model == 0) return;
+
+    if (!model->uploadedToGPU)
+    {
+        for (int x = 0; x < model->model.meshCount; x++) UploadMesh(&model->model.meshes[x], true);
+    }
+    else
+    {
+        TraceLog(LOG_WARNING, "Model is already uploaded to GPU");
+    }
 }
 
 // Check if a model is valid (loaded in GPU, VAO/VBOs)
@@ -4276,7 +4340,7 @@ static void BuildPoseFromParentJoints(BoneInfo *bones, int boneCount, Transform 
 //  - A mesh is created for every material present in the obj file
 //  - the model.meshCount is therefore the materialCount returned from tinyobj
 //  - the mesh is automatically triangulated by tinyobj
-static Model LoadOBJ(const char *fileName)
+static Model LoadOBJ(const char *fileName, bool uploadToGPU)
 {
     tinyobj_attrib_t objAttributes = { 0 };
     tinyobj_shape_t *objShapes = NULL;
@@ -4493,7 +4557,8 @@ static Model LoadOBJ(const char *fileName)
     tinyobj_shapes_free(objShapes, objShapeCount);
     tinyobj_materials_free(objMaterials, objMaterialCount);
 
-    for (int i = 0; i < model.meshCount; i++) UploadMesh(model.meshes + i, true);
+    if (uploadToGPU) 
+        for (int i = 0; i < model.meshCount; i++) UploadMesh(model.meshes + i, true);
 
     // Restore current working directory
     if (CHDIR(currentDir) != 0)

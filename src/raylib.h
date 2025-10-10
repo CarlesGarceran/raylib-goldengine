@@ -419,6 +419,12 @@ typedef struct Model {
     Transform *bindPose;    // Bones base transformation (pose)
 } Model;
 
+typedef struct AsyncModel {
+    Model model;
+    bool uploadedToGPU;
+    bool loaded;
+} AsyncModel;
+
 // ModelAnimation
 typedef struct ModelAnimation {
     int boneCount;          // Number of bones
@@ -1558,11 +1564,16 @@ RLAPI void DrawGrid(int slices, float spacing);                                 
 //------------------------------------------------------------------------------------
 
 // Model management functions
-RLAPI Model LoadModel(const char *fileName);                                                // Load model from files (meshes and materials)
+RLAPI AsyncModel LoadModelAsync(const char* fileName);
+RLAPI Model LoadModel(const char* fileName);                                             // Load model from files (meshes and materials)
 RLAPI Model LoadModelFromMesh(Mesh mesh);                                                   // Load model from generated mesh (default material)
 RLAPI bool IsModelValid(Model model);                                                       // Check if a model is valid (loaded in GPU, VAO/VBOs)
 RLAPI void UnloadModel(Model model);                                                        // Unload model (including meshes) from memory (RAM and/or VRAM)
 RLAPI BoundingBox GetModelBoundingBox(Model model);                                         // Compute model bounding box limits (considers all meshes)
+
+// ASYNC LOADING
+
+RLAPI void UploadAsyncModelToGPU(AsyncModel* model);
 
 // Model drawing functions
 RLAPI void DrawModel(Model model, Vector3 position, float scale, Color tint);               // Draw a model (with texture if set)
@@ -1629,7 +1640,7 @@ RLAPI RayCollision GetRayCollisionQuad(Ray ray, Vector3 p1, Vector3 p2, Vector3 
 //------------------------------------------------------------------------------------
 // Audio Loading and Playing Functions (Module: audio)
 //------------------------------------------------------------------------------------
-typedef void (*AudioCallback)(void *bufferData, unsigned int frames);
+typedef void (*AudioCallback)(void *bufferData, unsigned int frames, void* userData);
 
 // Audio device management functions
 RLAPI void InitAudioDevice(void);                                     // Initialize audio device and context
@@ -1702,6 +1713,9 @@ RLAPI void SetAudioStreamPitch(AudioStream stream, float pitch);      // Set pit
 RLAPI void SetAudioStreamPan(AudioStream stream, float pan);          // Set pan for audio stream (0.5 is centered)
 RLAPI void SetAudioStreamBufferSizeDefault(int size);                 // Default size for new audio streams
 RLAPI void SetAudioStreamCallback(AudioStream stream, AudioCallback callback); // Audio thread callback to request new data
+
+RLAPI void* GetAudioStreamUserData(AudioStream stream);
+RLAPI void SetAudioStreamUserData(AudioStream stream, void* userData);
 
 RLAPI void AttachAudioStreamProcessor(AudioStream stream, AudioCallback processor); // Attach audio stream processor to stream, receives frames x 2 samples as 'float' (stereo)
 RLAPI void DetachAudioStreamProcessor(AudioStream stream, AudioCallback processor); // Detach audio stream processor from stream
