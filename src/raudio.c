@@ -359,6 +359,7 @@ struct rAudioBuffer {
     unsigned int frameCursorPos;    // Frame cursor position
     unsigned int framesProcessed;   // Total frames processed in this buffer (required for play timing)
 
+    void* userData;
     unsigned char *data;            // Data buffer, on music stream keeps filling
 
     rAudioBuffer *next;             // Next audio buffer on the list
@@ -2246,6 +2247,33 @@ void SetAudioStreamCallback(AudioStream stream, AudioCallback callback)
     }
 }
 
+
+// Obtain the userdata from an audio stream
+void* GetAudioStreamUserData(AudioStream stream)
+{
+    void* result = NULL;
+
+    if(stream.buffer != NULL)
+    {
+        ma_mutex_lock(&AUDIO.System.lock);
+        result = stream.buffer->userData;
+        ma_mutex_unlock(&AUDIO.System.lock);
+    }
+
+    return result;
+}
+
+// Update the inner userdata
+void SetAudioStreamUserData(AudioStream stream, void* userData)
+{
+    if(stream.buffer != NULL)
+    {
+        ma_mutex_lock(&AUDIO.System.lock);
+        stream.buffer->userData = userData;
+        ma_mutex_unlock(&AUDIO.System.lock);
+    }
+}
+
 // Add processor to audio stream. Contrary to buffers, the order of processors is important
 // The new processor must be added at the end. As there aren't supposed to be a lot of processors attached to
 // a given stream, we iterate through the list to find the end. That way we don't need a pointer to the last element
@@ -2367,7 +2395,7 @@ static ma_uint32 ReadAudioBufferFramesInInternalFormat(AudioBuffer *audioBuffer,
     // Using audio buffer callback
     if (audioBuffer->callback)
     {
-        audioBuffer->callback(framesOut, frameCount);
+        audioBuffer->callback(framesOut, frameCount, audioBuffer->userData);
         audioBuffer->framesProcessed += frameCount;
 
         return frameCount;
@@ -2545,7 +2573,7 @@ static void OnSendAudioDataToDevice(ma_device *pDevice, void *pFramesOut, const 
                         rAudioProcessor *processor = audioBuffer->processor;
                         while (processor)
                         {
-                            processor->process(framesIn, framesJustRead);
+                            processor->process(framesIn, framesJustRead, audioBuffer->userData);
                             processor = processor->next;
                         }
 
