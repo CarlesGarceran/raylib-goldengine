@@ -2532,6 +2532,8 @@ static void OnSendAudioDataToDevice(ma_device *pDevice, void *pFramesOut, const 
 {
     (void)pDevice;
 
+    void* userData = (void*)0;
+
     // Mixing is basically just an accumulation, we need to initialize the output buffer to 0
     memset(pFramesOut, 0, frameCount*pDevice->playback.channels*ma_get_bytes_per_sample(pDevice->playback.format));
 
@@ -2573,6 +2575,9 @@ static void OnSendAudioDataToDevice(ma_device *pDevice, void *pFramesOut, const 
                         rAudioProcessor *processor = audioBuffer->processor;
                         while (processor)
                         {
+                            if (audioBuffer->userData != NULL)
+                                userData = audioBuffer->userData;
+
                             processor->process(framesIn, framesJustRead, audioBuffer->userData);
                             processor = processor->next;
                         }
@@ -2617,7 +2622,7 @@ static void OnSendAudioDataToDevice(ma_device *pDevice, void *pFramesOut, const 
     rAudioProcessor *processor = AUDIO.mixedProcessor;
     while (processor)
     {
-        processor->process(pFramesOut, frameCount);
+        processor->process(pFramesOut, frameCount, userData);
         processor = processor->next;
     }
 

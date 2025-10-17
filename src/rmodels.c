@@ -1099,7 +1099,7 @@ AsyncModel LoadModelAsync(const char *fileName)
     Model model = { 0 };
 
 #if defined(SUPPORT_FILEFORMAT_OBJ)
-    if (IsFileExtension(fileName, ".obj")) model = LoadOBJ(fileName, false);
+    if (IsFileExtension(fileName, ".obj")) model = LoadOBJ(fileName);
 #endif
 #if defined(SUPPORT_FILEFORMAT_IQM)
     if (IsFileExtension(fileName, ".iqm")) model = LoadIQM(fileName);

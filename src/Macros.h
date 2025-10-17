@@ -1,4 +1,4 @@
-#ifdef ENVIRONMENT64
+#if ENVIRONMENT64
 
 #define _CRT_SECURE_NO_WARNINGS
 #define WIN32
@@ -23,7 +23,7 @@
 
 #endif
 
-#ifdef ENVIRONMENT32
+#if ENVIRONMENT32
 
 #define BUILD_LIBTYPE_SHARED
 #define WIN32
