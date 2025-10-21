@@ -2,8 +2,6 @@
 #include <vector>
 #include <map>
 
-#define LOG_OUTPUT
-
 #ifdef LOG_OUTPUT
 #define LOG printf
 #else
