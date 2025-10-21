@@ -738,6 +738,7 @@ RLAPI void rlSetRenderBatchActive(rlRenderBatch *batch); // Set the active rende
 RLAPI void rlDrawRenderBatchActive(void);               // Update and draw internal render batch
 RLAPI bool rlCheckRenderBatchLimit(int vCount);         // Check internal buffer overflow for a given number of vertex
 
+RLAPI void rlReloadTextureUnits();
 RLAPI void rlSetTexture(unsigned int id);               // Set current texture for render batch and check buffers limits
 
 //------------------------------------------------------------------------------------------------------------------------
@@ -837,6 +838,8 @@ RLAPI void rlLoadDrawQuad(void);     // Load and draw a quad
 ************************************************************************************/
 
 #if defined(RLGL_IMPLEMENTATION)
+
+#include "List.h"
 
 // Expose OpenGL functions from glad in raylib
 #if defined(BUILD_LIBTYPE_SHARED)
@@ -1088,7 +1091,10 @@ typedef struct rlglData {
 
         unsigned int currentTextureId;      // Current texture id to be used on glBegin
         unsigned int defaultTextureId;      // Default texture used on shapes/poly drawing (required by shader)
-        unsigned int activeTextureId[RL_DEFAULT_BATCH_MAX_TEXTURE_UNITS];    // Active texture ids to be enabled on batch drawing (0 active by default)
+        
+        List* activeTextureId;
+
+        //unsigned int activeTextureId[RL_DEFAULT_BATCH_MAX_TEXTURE_UNITS];    // Active texture ids to be enabled on batch drawing (0 active by default)
         unsigned int defaultVShaderId;      // Default vertex shader id (used by default shader program)
         unsigned int defaultFShaderId;      // Default fragment shader id (used by default shader program)
         unsigned int defaultShaderId;       // Default shader program id, supports vertex color and diffuse texture
@@ -1656,6 +1662,12 @@ void rlColor3f(float x, float y, float z)
 //--------------------------------------------------------------------------------------
 // Module Functions Definition - OpenGL style functions (common to 1.1, 3.3+, ES2)
 //--------------------------------------------------------------------------------------
+
+inline RLAPI void rlReloadTextureUnits()
+{
+    DestroyList(RLGL.State.activeTextureId);
+    RLGL.State.activeTextureId = CreateList(sizeof(unsigned int), RL_DEFAULT_BATCH_MAX_TEXTURE_UNITS);
+}
 
 // Set current texture to use
 void rlSetTexture(unsigned int id)
@@ -2328,6 +2340,9 @@ void rlglInit(int width, int height)
     RLGL.State.modelview = rlMatrixIdentity();
     RLGL.State.currentMatrix = &RLGL.State.modelview;
 #endif  // GRAPHICS_API_OPENGL_33 || GRAPHICS_API_OPENGL_ES2
+
+    RLGL.State.activeTextureId = CreateList(sizeof(unsigned int), RL_DEFAULT_BATCH_MAX_TEXTURE_UNITS);
+    SetFallbackValue(RLGL.State.activeTextureId, 0);
 
     // Initialize OpenGL default states
     //----------------------------------------------------------
@@ -3114,12 +3129,12 @@ void rlDrawRenderBatch(rlRenderBatch *batch)
 
             // Activate additional sampler textures
             // Those additional textures will be common for all draw calls of the batch
-            for (int i = 0; i < RL_DEFAULT_BATCH_MAX_TEXTURE_UNITS; i++)
+            for (int i = 0; i < SizeOf(RLGL.State.activeTextureId); i++)
             {
-                if (RLGL.State.activeTextureId[i] > 0)
+                if (GetAt(RLGL.State.activeTextureId, i) > 0)
                 {
                     glActiveTexture(GL_TEXTURE0 + 1 + i);
-                    glBindTexture(GL_TEXTURE_2D, RLGL.State.activeTextureId[i]);
+                    glBindTexture(GL_TEXTURE_2D, GetAt(RLGL.State.activeTextureId, i));
                 }
             }
 
@@ -3188,7 +3203,7 @@ void rlDrawRenderBatch(rlRenderBatch *batch)
     }
 
     // Reset active texture units for next batch
-    for (int i = 0; i < RL_DEFAULT_BATCH_MAX_TEXTURE_UNITS; i++) RLGL.State.activeTextureId[i] = 0;
+    for (int i = 0; i < SizeOf(RLGL.State.activeTextureId); i++) SetAt(RLGL.State.activeTextureId, i, 0);
 
     // Reset draws counter to one draw for the batch
     batch->drawCounter = 1;
@@ -4477,25 +4492,35 @@ void rlSetUniformSampler(int locIndex, unsigned int textureId)
 {
 #if defined(GRAPHICS_API_OPENGL_33) || defined(GRAPHICS_API_OPENGL_ES2)
     // Check if texture is already active
-    for (int i = 0; i < RL_DEFAULT_BATCH_MAX_TEXTURE_UNITS; i++)
+    for (int i = 0; i < SizeOf(RLGL.State.activeTextureId); i++)
     {
-        if (RLGL.State.activeTextureId[i] == textureId)
+        if (GetAt(RLGL.State.activeTextureId, i) == textureId)
         {
             glUniform1i(locIndex, 1 + i);
             return;
         }
     }
 
+    bool registeredThroughSet = false;
+
     // Register a new active texture for the internal batch system
     // NOTE: Default texture is always activated as GL_TEXTURE0
-    for (int i = 0; i < RL_DEFAULT_BATCH_MAX_TEXTURE_UNITS; i++)
+    for (int i = 0; i < SizeOf(RLGL.State.activeTextureId); i++)
     {
-        if (RLGL.State.activeTextureId[i] == 0)
+        if (GetAt(RLGL.State.activeTextureId, i) == 0)
         {
             glUniform1i(locIndex, 1 + i);              // Activate new texture unit
-            RLGL.State.activeTextureId[i] = textureId; // Save texture id for binding on drawing
+            SetAt(RLGL.State.activeTextureId, i, textureId); // Save texture id for binding on drawing
+            registeredThroughSet = true;
             break;
         }
+    }
+
+    if (!registeredThroughSet)
+    {
+        int i = SizeOf(RLGL.State.activeTextureId) - 1;
+        glUniform1i(locIndex, 1 + i);
+        PushBack(RLGL.State.activeTextureId, textureId);
     }
 #endif
 }
