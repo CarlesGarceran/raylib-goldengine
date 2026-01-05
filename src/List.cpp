@@ -14,7 +14,6 @@ void stub(const char*) {}
 
 std::vector<unsigned int>* ToVector(void* data)
 {
-	return static_cast<std::vector<unsigned int>*>(data);
 }
 
 extern "C"
@@ -28,8 +27,6 @@ extern "C"
 	{
 		List* list = new List();
 		list->element_size = elementSize;
-		list->inner_ref = (void*)new std::vector<unsigned int>();
-		list->defaultValue = 0;
 
 		for (int i = 0; i < initialCapacity; i++)
 		{
@@ -39,7 +36,6 @@ extern "C"
 		return list;
 	}
 
-	void SetFallbackValue(List* list, unsigned int defaultValue)
 	{
 		if (!list) return;
 
@@ -54,14 +50,12 @@ extern "C"
 		{
 			return ToVector(list->inner_ref)->data();
 		}
-		catch (const std::exception& ex)
 		{
 			LOG(ex.what());
 			return nullptr;
 		}
 	}
 
-	unsigned int GetAt(List* list, int index)
 	{
 		if (!list) return NULL;
 
@@ -69,14 +63,12 @@ extern "C"
 		{
 			return ToVector(list->inner_ref)->at(index);
 		}
-		catch (const std::exception& ex)
 		{
 			LOG(ex.what());
 			return 0;
 		}
 	}
 
-	void PushBack(List* list, unsigned int data)
 	{
 		if (!list) return;
 
@@ -84,13 +76,11 @@ extern "C"
 		{
 			ToVector(list->inner_ref)->push_back(data);
 		}
-		catch (const std::exception& ex)
 		{
 			LOG(ex.what());
 		}
 	}
 
-	void Emplace(List* list, int index, unsigned int data)
 	{
 		if (!list) return;
 
@@ -101,13 +91,11 @@ extern "C"
 
 			vector->emplace(vector->begin() + index, data);
 		}
-		catch (const std::exception& ex)
 		{
 			LOG(ex.what());
 		}
 	}
 
-	void SetAt(List* list, int index, unsigned int data)
 	{
 		if (!list) return;
 
@@ -121,7 +109,6 @@ extern "C"
 
 			(*vector)[index] = data;
 		}
-		catch (const std::exception& ex)
 		{
 			LOG(ex.what());
 		}
@@ -144,7 +131,6 @@ extern "C"
 		{
 			return ToVector(list->inner_ref)->size();
 		}
-		catch (const std::exception& ex)
 		{
 			LOG(ex.what());
 			return 0;
