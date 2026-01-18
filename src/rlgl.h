@@ -791,7 +791,7 @@ RLAPI int rlGetLocationAttrib(unsigned int shaderId, const char *attribName);   
 RLAPI void rlSetUniform(int locIndex, const void *value, int uniformType, int count); // Set shader value uniform
 RLAPI void rlSetUniformMatrix(int locIndex, Matrix mat);                        // Set shader value matrix
 RLAPI void rlSetUniformMatrices(int locIndex, const Matrix *mat, int count);    // Set shader value matrices
-RLAPI void rlSetUniformSampler(int locIndex, unsigned int textureId);           // Set shader value sampler
+RLAPI void rlSetUniformSampler(int locIndex, unsigned int textureId, bool cubeMap);           // Set shader value sampler
 RLAPI void rlSetShader(unsigned int id, int *locs);                             // Set shader currently active (id and locations)
 
 // Compute shader management
@@ -1665,6 +1665,18 @@ void rlColor3f(float x, float y, float z)
 
 RLAPI void rlReloadTextureUnits()
 {
+    for (int i = 0; i < SizeOf(RLGL.State.activeTextureId); i++)
+    {
+        if (i != 0)
+        {
+            Sampler sampler = GetAt(RLGL.State.activeTextureId, i);
+            rlActiveTextureSlot(i);
+
+            if (sampler.samplerType == TEX2D) rlDisableTexture();
+            else if (sampler.samplerType == CUBEMAP) rlDisableTextureCubemap();
+        }
+    }
+
     DestroyList(RLGL.State.activeTextureId);
     RLGL.State.activeTextureId = CreateList(sizeof(unsigned int), RL_DEFAULT_BATCH_MAX_TEXTURE_UNITS);
 }
@@ -2342,7 +2354,7 @@ void rlglInit(int width, int height)
 #endif  // GRAPHICS_API_OPENGL_33 || GRAPHICS_API_OPENGL_ES2
 
     RLGL.State.activeTextureId = CreateList(sizeof(unsigned int), RL_DEFAULT_BATCH_MAX_TEXTURE_UNITS);
-    SetFallbackValue(RLGL.State.activeTextureId, 0);
+    SetFallbackValue(RLGL.State.activeTextureId, (Sampler){ TEX2D, 0 });
 
     // Initialize OpenGL default states
     //----------------------------------------------------------
@@ -3131,10 +3143,11 @@ void rlDrawRenderBatch(rlRenderBatch *batch)
             // Those additional textures will be common for all draw calls of the batch
             for (int i = 0; i < SizeOf(RLGL.State.activeTextureId); i++)
             {
-                if (GetAt(RLGL.State.activeTextureId, i) > 0)
+                Sampler sampler = GetAt(RLGL.State.activeTextureId, i);
+                if (sampler.texId > 0)
                 {
                     glActiveTexture(GL_TEXTURE0 + 1 + i);
-                    glBindTexture(GL_TEXTURE_2D, GetAt(RLGL.State.activeTextureId, i));
+                    glBindTexture(GL_TEXTURE_2D, sampler.texId);
                 }
             }
 
@@ -3203,7 +3216,7 @@ void rlDrawRenderBatch(rlRenderBatch *batch)
     }
 
     // Reset active texture units for next batch
-    for (int i = 0; i < SizeOf(RLGL.State.activeTextureId); i++) SetAt(RLGL.State.activeTextureId, i, 0);
+    for (int i = 0; i < SizeOf(RLGL.State.activeTextureId); i++) SetAt(RLGL.State.activeTextureId, i, (Sampler){ TEX2D, 0 });
 
     // Reset draws counter to one draw for the batch
     batch->drawCounter = 1;
@@ -4488,15 +4501,16 @@ void rlSetUniformMatrices(int locIndex, const Matrix *matrices, int count)
 }
 
 // Set shader value uniform sampler
-void rlSetUniformSampler(int locIndex, unsigned int textureId)
+void rlSetUniformSampler(int locIndex, unsigned int textureId, bool cubeMap)
 {
 #if defined(GRAPHICS_API_OPENGL_33) || defined(GRAPHICS_API_OPENGL_ES2)
     // Check if texture is already active
     for (int i = 0; i < SizeOf(RLGL.State.activeTextureId); i++)
     {
-        if (GetAt(RLGL.State.activeTextureId, i) == textureId)
+        Sampler sampler = GetAt(RLGL.State.activeTextureId, i);
+        if (sampler.texId == textureId)
         {
-            glUniform1i(locIndex, 1 + i);
+            glUniform1i(locIndex, i);
             return;
         }
     }
@@ -4507,10 +4521,19 @@ void rlSetUniformSampler(int locIndex, unsigned int textureId)
     // NOTE: Default texture is always activated as GL_TEXTURE0
     for (int i = 0; i < SizeOf(RLGL.State.activeTextureId); i++)
     {
-        if (GetAt(RLGL.State.activeTextureId, i) == 0)
+        Sampler sampler = GetAt(RLGL.State.activeTextureId, i);
+        if (sampler.texId == 0)
         {
-            glUniform1i(locIndex, 1 + i);              // Activate new texture unit
-            SetAt(RLGL.State.activeTextureId, i, textureId); // Save texture id for binding on drawing
+            rlActiveTextureSlot(i);
+
+            if (cubeMap) rlEnableTextureCubemap(textureId);
+            else rlEnableTexture(textureId);
+            
+            glUniform1i(locIndex, i);              // Activate new texture unit
+
+            if(cubeMap) SetAt(RLGL.State.activeTextureId, i, (Sampler){ CUBEMAP, textureId }); // Save texture id for binding on drawing
+            else SetAt(RLGL.State.activeTextureId, i, (Sampler) { TEX2D, textureId }); // Save texture id for binding on drawing
+
             registeredThroughSet = true;
             break;
         }
@@ -4519,8 +4542,16 @@ void rlSetUniformSampler(int locIndex, unsigned int textureId)
     if (!registeredThroughSet)
     {
         int i = SizeOf(RLGL.State.activeTextureId) - 1;
-        glUniform1i(locIndex, 1 + i);
-        PushBack(RLGL.State.activeTextureId, textureId);
+
+        rlActiveTextureSlot(i);
+
+        if (cubeMap) rlEnableTextureCubemap(textureId);
+        else rlEnableTexture(textureId);
+
+        glUniform1i(locIndex, i);
+
+        if (cubeMap) PushBack(RLGL.State.activeTextureId, (Sampler) { CUBEMAP, textureId }); // Save texture id for binding on drawing
+        else PushBack(RLGL.State.activeTextureId, (Sampler) { TEX2D, textureId }); // Save texture id for binding on drawing
     }
 #endif
 }

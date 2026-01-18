@@ -1489,7 +1489,17 @@ void SetShaderValueTexture(Shader shader, int locIndex, Texture2D texture)
     if (locIndex > -1)
     {
         rlEnableShader(shader.id);
-        rlSetUniformSampler(locIndex, texture.id);
+        rlSetUniformSampler(locIndex, texture.id, false);
+        //rlDisableShader();
+    }
+}
+
+void SetShaderValueTextureCubemap(Shader shader, int locIndex, TextureCubemap texture)
+{
+    if (locIndex > -1)
+    {
+        rlEnableShader(shader.id);
+        rlSetUniformSampler(locIndex, texture.id, true);
         //rlDisableShader();
     }
 }

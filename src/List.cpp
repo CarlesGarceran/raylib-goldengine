@@ -12,8 +12,13 @@ void stub(const char*) {}
 #define LOG stub
 #endif
 
-std::vector<unsigned int>* ToVector(void* data)
+std::vector<Sampler>* ToVector(void* data)
 {
+	if (!data) {
+		LOG("Error: null data pointer in ToVector");
+		return nullptr;
+	}
+	return static_cast<std::vector<Sampler>*>(data);
 }
 
 extern "C"
@@ -27,15 +32,18 @@ extern "C"
 	{
 		List* list = new List();
 		list->element_size = elementSize;
+		list->inner_ref = (void*)new std::vector<Sampler>();
+		list->defaultValue = { TEX2D, 0 };
 
 		for (int i = 0; i < initialCapacity; i++)
 		{
-			ToVector(list->inner_ref)->push_back(0);
+			ToVector(list->inner_ref)->push_back(list->defaultValue);
 		}
 
 		return list;
 	}
 
+	void SetFallbackValue(List* list, Sampler defaultValue)
 	{
 		if (!list) return;
 
@@ -50,25 +58,33 @@ extern "C"
 		{
 			return ToVector(list->inner_ref)->data();
 		}
+		catch (const std::exception& ex)
 		{
 			LOG(ex.what());
 			return nullptr;
 		}
 	}
 
+	Sampler GetAt(List* list, int index)
 	{
-		if (!list) return NULL;
-
-		try
+		if (!list || index < 0) 
 		{
-			return ToVector(list->inner_ref)->at(index);
+			LOG("Error: Invalid index");
+			return { TEX2D, 0 };  // Return default if index is invalid
 		}
+
+		try 
+		{
+			return ToVector(list->inner_ref)->at(index); // Throws out_of_range on invalid index
+		}
+		catch (const std::exception& ex) 
 		{
 			LOG(ex.what());
-			return 0;
+			return { TEX2D, 0 }; // Return default value
 		}
 	}
 
+	void PushBack(List* list, Sampler data)
 	{
 		if (!list) return;
 
@@ -76,11 +92,13 @@ extern "C"
 		{
 			ToVector(list->inner_ref)->push_back(data);
 		}
+		catch (const std::exception& ex)
 		{
 			LOG(ex.what());
 		}
 	}
 
+	void Emplace(List* list, int index, Sampler data)
 	{
 		if (!list) return;
 
@@ -91,11 +109,13 @@ extern "C"
 
 			vector->emplace(vector->begin() + index, data);
 		}
+		catch (const std::exception& ex)
 		{
 			LOG(ex.what());
 		}
 	}
 
+	void SetAt(List* list, int index, Sampler data)
 	{
 		if (!list) return;
 
@@ -109,6 +129,7 @@ extern "C"
 
 			(*vector)[index] = data;
 		}
+		catch (const std::exception& ex)
 		{
 			LOG(ex.what());
 		}
@@ -131,6 +152,7 @@ extern "C"
 		{
 			return ToVector(list->inner_ref)->size();
 		}
+		catch (const std::exception& ex)
 		{
 			LOG(ex.what());
 			return 0;

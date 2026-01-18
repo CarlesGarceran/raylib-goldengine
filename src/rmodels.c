@@ -1499,34 +1499,6 @@ void DrawMeshShader(Mesh mesh, Shader shader, Matrix transform)
     // Bind shader program
     rlEnableShader(shader.id);
 
-    // Send required data to shader (matrices, values)
-    //-----------------------------------------------------
-    // Upload to shader material.colDiffuse
-    if (shader.locs[SHADER_LOC_COLOR_DIFFUSE] != -1)
-    {
-        float values[4] = {
-            (float)255.0f / 255.0f,
-            (float)255.0f / 255.0f,
-            (float)255.0f / 255.0f,
-            (float)255.0f / 255.0f
-        };
-
-        rlSetUniform(shader.locs[SHADER_LOC_COLOR_DIFFUSE], values, SHADER_UNIFORM_VEC4, 1);
-    }
-
-    // Upload to shader material.colSpecular (if location available)
-    if (shader.locs[SHADER_LOC_COLOR_SPECULAR] != -1)
-    {
-        float values[4] = {
-            (float)255.0f / 255.0f,
-            (float)255.0f / 255.0f,
-            (float)255.0f / 255.0f,
-            (float)255.0f / 255.0f
-        };
-
-        rlSetUniform(shader.locs[SHADER_LOC_COLOR_SPECULAR], values, SHADER_UNIFORM_VEC4, 1);
-    }
-
     // Get a copy of current matrices to work with,
     // just in case stereo render is required, and we need to modify them
     // NOTE: At this point the modelview matrix just contains the view matrix (camera)
@@ -1951,35 +1923,6 @@ void DrawMeshShaderInstanced(Mesh mesh, Shader shader, const Matrix* transforms,
 
     // Bind shader program
     rlEnableShader(shader.id);
-
-
-    // Send required data to shader (matrices, values)
-    //-----------------------------------------------------
-    // Upload to shader material.colDiffuse
-    if (shader.locs[SHADER_LOC_COLOR_DIFFUSE] != -1)
-    {
-        float values[4] = {
-            (float)255.0f / 255.0f,
-            (float)255.0f / 255.0f,
-            (float)255.0f / 255.0f,
-            (float)255.0f / 255.0f
-        };
-
-        rlSetUniform(shader.locs[SHADER_LOC_COLOR_DIFFUSE], values, SHADER_UNIFORM_VEC4, 1);
-    }
-
-    // Upload to shader material.colSpecular (if location available)
-    if (shader.locs[SHADER_LOC_COLOR_SPECULAR] != -1)
-    {
-        float values[4] = {
-            (float)255.0f / 255.0f,
-            (float)255.0f / 255.0f,
-            (float)255.0f / 255.0f,
-            (float)255.0f / 255.0f
-        };
-
-        rlSetUniform(shader.locs[SHADER_LOC_COLOR_SPECULAR], values, SHADER_UNIFORM_VEC4, 1);
-    }
 
     // Get a copy of current matrices to work with,
     // just in case stereo render is required, and we need to modify them
