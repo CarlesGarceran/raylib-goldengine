@@ -40,7 +40,7 @@ return {
       name = "RLAPI",
       type = "UNKNOWN",
       value = "__declspec(dllexport)",
-      description = "We are building the library as a Win32 shared library (.dll)"
+      description = "Building the library as a Win32 shared library (.dll)"
     },
     {
       name = "PI",
@@ -769,22 +769,22 @@ return {
         {
           type = "Vector2",
           name = "offset",
-          description = "Camera offset (displacement from target)"
+          description = "Camera offset (screen space offset from window origin)"
         },
         {
           type = "Vector2",
           name = "target",
-          description = "Camera target (rotation and zoom origin)"
+          description = "Camera target (world space target point that is mapped to screen space offset)"
         },
         {
           type = "float",
           name = "rotation",
-          description = "Camera rotation in degrees"
+          description = "Camera rotation in degrees (pivots around target)"
         },
         {
           type = "float",
           name = "zoom",
-          description = "Camera zoom (scaling), should be 1.0f by default"
+          description = "Camera zoom (scaling around target), must not be set to 0, set to 1.0f for no scale"
         }
       }
     },
@@ -838,6 +838,21 @@ return {
           description = "Vertex indices (in case vertex data comes indexed)"
         },
         {
+          type = "int",
+          name = "boneCount",
+          description = "Number of bones (MAX: 256 bones)"
+        },
+        {
+          type = "unsigned char *",
+          name = "boneIndices",
+          description = "Vertex bone indices, up to 4 bones influence by vertex (skinning) (shader-location = 6)"
+        },
+        {
+          type = "float *",
+          name = "boneWeights",
+          description = "Vertex bone weight, up to 4 bones influence by vertex (skinning) (shader-location = 7)"
+        },
+        {
           type = "float *",
           name = "animVertices",
           description = "Animated vertex positions (after bones transformations)"
@@ -846,26 +861,6 @@ return {
           type = "float *",
           name = "animNormals",
           description = "Animated normals (after bones transformations)"
-        },
-        {
-          type = "unsigned char *",
-          name = "boneIds",
-          description = "Vertex bone ids, max 255 bone ids, up to 4 bones influence by vertex (skinning) (shader-location = 6)"
-        },
-        {
-          type = "float *",
-          name = "boneWeights",
-          description = "Vertex bone weight, up to 4 bones influence by vertex (skinning) (shader-location = 7)"
-        },
-        {
-          type = "Matrix *",
-          name = "boneMatrices",
-          description = "Bones animated transformation matrices"
-        },
-        {
-          type = "int",
-          name = "boneCount",
-          description = "Number of bones"
         },
         {
           type = "unsigned int",
@@ -975,6 +970,27 @@ return {
       }
     },
     {
+      name = "ModelSkeleton",
+      description = "Skeleton, animation bones hierarchy",
+      fields = {
+        {
+          type = "int",
+          name = "boneCount",
+          description = "Number of bones"
+        },
+        {
+          type = "BoneInfo *",
+          name = "bones",
+          description = "Bones information (skeleton)"
+        },
+        {
+          type = "ModelAnimPose",
+          name = "bindPose",
+          description = "Bones base transformation (Transform[])"
+        }
+      }
+    },
+    {
       name = "Model",
       description = "Model, meshes, materials and animation data",
       fields = {
@@ -1009,50 +1025,45 @@ return {
           description = "Mesh material number"
         },
         {
-          type = "int",
-          name = "boneCount",
-          description = "Number of bones"
+          type = "ModelSkeleton",
+          name = "skeleton",
+          description = "Skeleton for animation"
         },
         {
-          type = "BoneInfo *",
-          name = "bones",
-          description = "Bones information (skeleton)"
+          type = "ModelAnimPose",
+          name = "currentPose",
+          description = "Current animation pose (Transform[])"
         },
         {
-          type = "Transform *",
-          name = "bindPose",
-          description = "Bones base transformation (pose)"
+          type = "Matrix *",
+          name = "boneMatrices",
+          description = "Bones animated transformation matrices"
         }
       }
     },
     {
       name = "ModelAnimation",
-      description = "ModelAnimation",
+      description = "ModelAnimation, contains a full animation sequence",
       fields = {
-        {
-          type = "int",
-          name = "boneCount",
-          description = "Number of bones"
-        },
-        {
-          type = "int",
-          name = "frameCount",
-          description = "Number of animation frames"
-        },
-        {
-          type = "BoneInfo *",
-          name = "bones",
-          description = "Bones information (skeleton)"
-        },
-        {
-          type = "Transform **",
-          name = "framePoses",
-          description = "Poses array by frame"
-        },
         {
           type = "char[32]",
           name = "name",
           description = "Animation name"
+        },
+        {
+          type = "int",
+          name = "boneCount",
+          description = "Number of bones (per pose)"
+        },
+        {
+          type = "int",
+          name = "keyframeCount",
+          description = "Number of animation key frames"
+        },
+        {
+          type = "ModelAnimPose *",
+          name = "keyframePoses",
+          description = "Animation sequence keyframe poses [keyframe][pose]"
         }
       }
     },
@@ -1326,11 +1337,6 @@ return {
       fields = {
         {
           type = "unsigned int",
-          name = "capacity",
-          description = "Filepaths max entries"
-        },
-        {
-          type = "unsigned int",
           name = "count",
           description = "Filepaths entries count"
         },
@@ -1409,6 +1415,11 @@ return {
       type = "Camera3D",
       name = "Camera",
       description = "Camera type fallback, defaults to Camera3D"
+    },
+    {
+      type = "Transform",
+      name = "*ModelAnimPose",
+      description = "Anim pose, an array of Transform[]"
     }
   },
   enums = {
@@ -2507,7 +2518,7 @@ return {
         {
           name = "SHADER_LOC_MAP_HEIGHT",
           value = 21,
-          description = "Shader location: sampler2d texture: height"
+          description = "Shader location: sampler2d texture: heightmap"
         },
         {
           name = "SHADER_LOC_MAP_CUBEMAP",
@@ -2532,22 +2543,22 @@ return {
         {
           name = "SHADER_LOC_VERTEX_BONEIDS",
           value = 26,
-          description = "Shader location: vertex attribute: boneIds"
+          description = "Shader location: vertex attribute: bone indices"
         },
         {
           name = "SHADER_LOC_VERTEX_BONEWEIGHTS",
           value = 27,
-          description = "Shader location: vertex attribute: boneWeights"
+          description = "Shader location: vertex attribute: bone weights"
         },
         {
-          name = "SHADER_LOC_BONE_MATRICES",
+          name = "SHADER_LOC_MATRIX_BONETRANSFORMS",
           value = 28,
-          description = "Shader location: array of matrices uniform: boneMatrices"
+          description = "Shader location: matrix attribute: bone transforms (animation)"
         },
         {
-          name = "SHADER_LOC_VERTEX_INSTANCE_TX",
+          name = "SHADER_LOC_VERTEX_INSTANCETRANSFORMS",
           value = 29,
-          description = "Shader location: vertex attribute: instanceTransform"
+          description = "Shader location: vertex attribute: instance transforms"
         }
       }
     },
@@ -3865,6 +3876,14 @@ return {
       }
     },
     {
+      name = "SetTraceLogLevel",
+      description = "Set the current threshold (minimum) log level",
+      returnType = "void",
+      params = {
+        {type = "int", name = "logLevel"}
+      }
+    },
+    {
       name = "TraceLog",
       description = "Show trace log messages (LOG_DEBUG, LOG_INFO, LOG_WARNING, LOG_ERROR...)",
       returnType = "void",
@@ -3875,11 +3894,11 @@ return {
       }
     },
     {
-      name = "SetTraceLogLevel",
-      description = "Set the current threshold (minimum) log level",
+      name = "SetTraceLogCallback",
+      description = "Set custom trace log",
       returnType = "void",
       params = {
-        {type = "int", name = "logLevel"}
+        {type = "TraceLogCallback", name = "callback"}
       }
     },
     {
@@ -3905,46 +3924,6 @@ return {
       returnType = "void",
       params = {
         {type = "void *", name = "ptr"}
-      }
-    },
-    {
-      name = "SetTraceLogCallback",
-      description = "Set custom trace log",
-      returnType = "void",
-      params = {
-        {type = "TraceLogCallback", name = "callback"}
-      }
-    },
-    {
-      name = "SetLoadFileDataCallback",
-      description = "Set custom file binary data loader",
-      returnType = "void",
-      params = {
-        {type = "LoadFileDataCallback", name = "callback"}
-      }
-    },
-    {
-      name = "SetSaveFileDataCallback",
-      description = "Set custom file binary data saver",
-      returnType = "void",
-      params = {
-        {type = "SaveFileDataCallback", name = "callback"}
-      }
-    },
-    {
-      name = "SetLoadFileTextCallback",
-      description = "Set custom file text data loader",
-      returnType = "void",
-      params = {
-        {type = "LoadFileTextCallback", name = "callback"}
-      }
-    },
-    {
-      name = "SetSaveFileTextCallback",
-      description = "Set custom file text data saver",
-      returnType = "void",
-      params = {
-        {type = "SaveFileTextCallback", name = "callback"}
       }
     },
     {
@@ -4007,6 +3986,38 @@ return {
       params = {
         {type = "const char *", name = "fileName"},
         {type = "const char *", name = "text"}
+      }
+    },
+    {
+      name = "SetLoadFileDataCallback",
+      description = "Set custom file binary data loader",
+      returnType = "void",
+      params = {
+        {type = "LoadFileDataCallback", name = "callback"}
+      }
+    },
+    {
+      name = "SetSaveFileDataCallback",
+      description = "Set custom file binary data saver",
+      returnType = "void",
+      params = {
+        {type = "SaveFileDataCallback", name = "callback"}
+      }
+    },
+    {
+      name = "SetLoadFileTextCallback",
+      description = "Set custom file text data loader",
+      returnType = "void",
+      params = {
+        {type = "LoadFileTextCallback", name = "callback"}
+      }
+    },
+    {
+      name = "SetSaveFileTextCallback",
+      description = "Set custom file text data saver",
+      returnType = "void",
+      params = {
+        {type = "SaveFileTextCallback", name = "callback"}
       }
     },
     {
@@ -4167,7 +4178,7 @@ return {
       description = "Change working directory, return true on success",
       returnType = "bool",
       params = {
-        {type = "const char *", name = "dir"}
+        {type = "const char *", name = "dirPath"}
       }
     },
     {
@@ -4231,6 +4242,24 @@ return {
       }
     },
     {
+      name = "GetDirectoryFileCount",
+      description = "Get the file count in a directory",
+      returnType = "unsigned int",
+      params = {
+        {type = "const char *", name = "dirPath"}
+      }
+    },
+    {
+      name = "GetDirectoryFileCountEx",
+      description = "Get the file count in a directory with extension filtering and recursive directory scan. Use 'DIR' in the filter string to include directories in the result",
+      returnType = "unsigned int",
+      params = {
+        {type = "const char *", name = "basePath"},
+        {type = "const char *", name = "filter"},
+        {type = "bool", name = "scanSubdirs"}
+      }
+    },
+    {
       name = "CompressData",
       description = "Compress data (DEFLATE algorithm), memory must be MemFree()",
       returnType = "unsigned char *",
@@ -4290,6 +4319,15 @@ return {
     {
       name = "ComputeSHA1",
       description = "Compute SHA1 hash code, returns static int[5] (20 bytes)",
+      returnType = "unsigned int *",
+      params = {
+        {type = "unsigned char *", name = "data"},
+        {type = "int", name = "dataSize"}
+      }
+    },
+    {
+      name = "ComputeSHA256",
+      description = "Compute SHA256 hash code, returns static int[8] (32 bytes)",
       returnType = "unsigned int *",
       params = {
         {type = "unsigned char *", name = "data"},
@@ -7772,30 +7810,25 @@ return {
     },
     {
       name = "UpdateModelAnimation",
-      description = "Update model animation pose (CPU)",
+      description = "Update model animation pose (vertex buffers and bone matrices)",
       returnType = "void",
       params = {
         {type = "Model", name = "model"},
         {type = "ModelAnimation", name = "anim"},
-        {type = "int", name = "frame"}
+        {type = "float", name = "frame"}
       }
     },
     {
-      name = "UpdateModelAnimationBones",
-      description = "Update model animation mesh bone matrices (GPU skinning)",
+      name = "UpdateModelAnimationEx",
+      description = "Update model animation pose, blending two animations",
       returnType = "void",
       params = {
         {type = "Model", name = "model"},
-        {type = "ModelAnimation", name = "anim"},
-        {type = "int", name = "frame"}
-      }
-    },
-    {
-      name = "UnloadModelAnimation",
-      description = "Unload animation data",
-      returnType = "void",
-      params = {
-        {type = "ModelAnimation", name = "anim"}
+        {type = "ModelAnimation", name = "animA"},
+        {type = "float", name = "frameA"},
+        {type = "ModelAnimation", name = "animB"},
+        {type = "float", name = "frameB"},
+        {type = "float", name = "blend"}
       }
     },
     {
@@ -7986,7 +8019,7 @@ return {
     },
     {
       name = "UpdateSound",
-      description = "Update sound buffer with new data (data and frame count should fit in sound)",
+      description = "Update sound buffer with new data (default data format: 32 bit float, stereo)",
       returnType = "void",
       params = {
         {type = "Sound", name = "sound"},
@@ -8096,7 +8129,7 @@ return {
     },
     {
       name = "SetSoundPan",
-      description = "Set pan for a sound (0.5 is center)",
+      description = "Set pan for a sound (-1.0 left, 0.0 center, 1.0 right)",
       returnType = "void",
       params = {
         {type = "Sound", name = "sound"},
@@ -8259,7 +8292,7 @@ return {
     },
     {
       name = "SetMusicPan",
-      description = "Set pan for a music (0.5 is center)",
+      description = "Set pan for a music (-1.0 left, 0.0 center, 1.0 right)",
       returnType = "void",
       params = {
         {type = "Music", name = "music"},

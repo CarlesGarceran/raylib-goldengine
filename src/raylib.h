@@ -4,13 +4,12 @@
 *
 *   FEATURES:
 *       - NO external dependencies, all required libraries included with raylib
-*       - Multiplatform: Windows, Linux, FreeBSD, OpenBSD, NetBSD, DragonFly,
-*                        MacOS, Haiku, Android, Raspberry Pi, DRM native, HTML5
+*       - Multiplatform: Windows, Linux, macOS, FreeBSD, Web, Android, Raspberry Pi, DRM native...
 *       - Written in plain C code (C99) in PascalCase/camelCase notation
 *       - Hardware accelerated with OpenGL (1.1, 2.1, 3.3, 4.3, ES2, ES3 - choose at compile)
-*       - Unique OpenGL abstraction layer (usable as standalone module): [rlgl]
+*       - Custom OpenGL abstraction layer (usable as standalone module): [rlgl]
 *       - Multiple Fonts formats supported (TTF, OTF, FNT, BDF, Sprite fonts)
-*       - Outstanding texture formats support, including compressed formats (DXT, ETC, ASTC)
+*       - Many texture formats supportted, including compressed formats (DXT, ETC, ASTC)
 *       - Full 3d support for 3d Shapes, Models, Billboards, Heightmaps and more!
 *       - Flexible Materials system, supporting classic maps and PBR maps
 *       - Animated 3D models supported (skeletal bones animation) (IQM, M3D, GLTF)
@@ -26,14 +25,12 @@
 *       - One default Shader is loaded on rlglInit()->rlLoadShaderDefault() [rlgl] (OpenGL 3.3 or ES2)
 *       - One default RenderBatch is loaded on rlglInit()->rlLoadRenderBatch() [rlgl] (OpenGL 3.3 or ES2)
 *
-*   DEPENDENCIES (included):
-*       [rcore][GLFW] rglfw (Camilla Löwy - github.com/glfw/glfw) for window/context management and input
-*       [rcore][RGFW] rgfw (ColleagueRiley - github.com/ColleagueRiley/RGFW) for window/context management and input
-*       [rlgl] glad/glad_gles2 (David Herberth - github.com/Dav1dde/glad) for OpenGL 3.3 extensions loading
+*   DEPENDENCIES:
+*       [rcore] Depends on the selected platform backend, check rcore.c header for details 
+*       [rlgl] glad/glad_gles2 (David Herberth - github.com/Dav1dde/glad) for OpenGL extensions loading
 *       [raudio] miniaudio (David Reid - github.com/mackron/miniaudio) for audio device/context management
 *
 *   OPTIONAL DEPENDENCIES (included):
-*       [rcore] msf_gif (Miles Fogle) for GIF recording
 *       [rcore] sinfl (Micha Mettke) for DEFLATE decompression algorithm
 *       [rcore] sdefl (Micha Mettke) for DEFLATE compression algorithm
 *       [rcore] rprand (Ramon Santamaria) for pseudo-random numbers generation
@@ -42,6 +39,7 @@
 *       [rtextures] stb_image_write (Sean Barret) for image writing (BMP, TGA, PNG, JPG)
 *       [rtextures] stb_image_resize2 (Sean Barret) for image resizing algorithms
 *       [rtextures] stb_perlin (Sean Barret) for Perlin Noise image generation
+*       [rtextures] rl_gputex (Ramon Santamaria) for GPU-compressed texture formats 
 *       [rtext] stb_truetype (Sean Barret) for ttf fonts loading
 *       [rtext] stb_rect_pack (Sean Barret) for rectangles packing
 *       [rmodels] par_shapes (Philip Rideout) for parametric 3d shapes generation
@@ -63,7 +61,7 @@
 *   raylib is licensed under an unmodified zlib/libpng license, which is an OSI-certified,
 *   BSD-like license that allows static linking with closed source software:
 *
-*   Copyright (c) 2013-2025 Ramon Santamaria (@raysan5)
+*   Copyright (c) 2013-2026 Ramon Santamaria (@raysan5)
 *
 *   This software is provided "as-is", without any express or implied warranty. In no event
 *   will the authors be held liable for any damages arising from the use of this software.
@@ -102,13 +100,13 @@
         #define __declspec(x) __attribute__((x))
     #endif
     #if defined(BUILD_LIBTYPE_SHARED)
-        #define RLAPI __declspec(dllexport)     // We are building the library as a Win32 shared library (.dll)
+        #define RLAPI __declspec(dllexport)     // Building the library as a Win32 shared library (.dll)
     #elif defined(USE_LIBTYPE_SHARED)
-        #define RLAPI __declspec(dllimport)     // We are using the library as a Win32 shared library (.dll)
+        #define RLAPI __declspec(dllimport)     // Using the library as a Win32 shared library (.dll)
     #endif
 #else
     #if defined(BUILD_LIBTYPE_SHARED)
-        #define RLAPI __attribute__((visibility("default"))) // We are building as a Unix shared library (.so/.dylib)
+        #define RLAPI __attribute__((visibility("default"))) // Building as a Unix shared library (.so/.dylib)
     #endif
 #endif
 
@@ -160,7 +158,7 @@
     #error "C++11 or later is required. Add -std=c++11"
 #endif
 
-// NOTE: We set some defines with some data types declared by raylib
+// NOTE: Set some defines with some data types declared by raylib
 // Other modules (raymath, rlgl) also require some of those types, so,
 // to be able to use those other modules as standalone (not depending on raylib)
 // this defines are very useful for internal check and avoid type (re)definitions
@@ -337,10 +335,10 @@ typedef Camera3D Camera;    // Camera type fallback, defaults to Camera3D
 
 // Camera2D, defines position/orientation in 2d space
 typedef struct Camera2D {
-    Vector2 offset;         // Camera offset (displacement from target)
-    Vector2 target;         // Camera target (rotation and zoom origin)
-    float rotation;         // Camera rotation in degrees
-    float zoom;             // Camera zoom (scaling), should be 1.0f by default
+    Vector2 offset;         // Camera offset (screen space offset from window origin)
+    Vector2 target;         // Camera target (world space target point that is mapped to screen space offset)
+    float rotation;         // Camera rotation in degrees (pivots around target)
+    float zoom;             // Camera zoom (scaling around target), must not be set to 0, set to 1.0f for no scale
 } Camera2D;
 
 // Mesh, vertex data and vao/vbo
@@ -354,16 +352,18 @@ typedef struct Mesh {
     float *texcoords2;      // Vertex texture second coordinates (UV - 2 components per vertex) (shader-location = 5)
     float *normals;         // Vertex normals (XYZ - 3 components per vertex) (shader-location = 2)
     float *tangents;        // Vertex tangents (XYZW - 4 components per vertex) (shader-location = 4)
-    unsigned char *colors;      // Vertex colors (RGBA - 4 components per vertex) (shader-location = 3)
-    unsigned short *indices;    // Vertex indices (in case vertex data comes indexed)
+    unsigned char *colors;  // Vertex colors (RGBA - 4 components per vertex) (shader-location = 3)
+    unsigned short *indices; // Vertex indices (in case vertex data comes indexed)
 
-    // Animation vertex data
+    // Skin data for animation
+    int boneCount;          // Number of bones (MAX: 256 bones)
+    unsigned char *boneIndices; // Vertex bone indices, up to 4 bones influence by vertex (skinning) (shader-location = 6)
+    float *boneWeights;     // Vertex bone weight, up to 4 bones influence by vertex (skinning) (shader-location = 7)
+
+    // Runtime animation vertex data (CPU skinning)
+    // NOTE: In case of GPU skinning, not used, pointers are NULL
     float *animVertices;    // Animated vertex positions (after bones transformations)
     float *animNormals;     // Animated normals (after bones transformations)
-    unsigned char *boneIds; // Vertex bone ids, max 255 bone ids, up to 4 bones influence by vertex (skinning) (shader-location = 6)
-    float *boneWeights;     // Vertex bone weight, up to 4 bones influence by vertex (skinning) (shader-location = 7)
-    Matrix *boneMatrices;   // Bones animated transformation matrices
-    int boneCount;          // Number of bones
 
     // OpenGL identifiers
     unsigned int vaoId;     // OpenGL Vertex Array Object id
@@ -397,11 +397,21 @@ typedef struct Transform {
     Vector3 scale;          // Scale
 } Transform;
 
+// Anim pose, an array of Transform[]
+typedef Transform *ModelAnimPose;
+
 // Bone, skeletal animation bone
 typedef struct BoneInfo {
     char name[32];          // Bone name
     int parent;             // Bone parent
 } BoneInfo;
+
+// Skeleton, animation bones hierarchy
+typedef struct ModelSkeleton {
+    int boneCount;          // Number of bones
+    BoneInfo *bones;        // Bones information (skeleton)
+    ModelAnimPose bindPose; // Bones base transformation (Transform[])
+} ModelSkeleton;
 
 // Model, meshes, materials and animation data
 typedef struct Model {
@@ -414,18 +424,20 @@ typedef struct Model {
     int *meshMaterial;      // Mesh material number
 
     // Animation data
-    int boneCount;          // Number of bones
-    BoneInfo *bones;        // Bones information (skeleton)
-    Transform *bindPose;    // Bones base transformation (pose)
+    ModelSkeleton skeleton; // Skeleton for animation
+
+    // Runtime animation data (CPU/GPU skinning)
+    ModelAnimPose currentPose; // Current animation pose (Transform[])
+    Matrix *boneMatrices;   // Bones animated transformation matrices
 } Model;
 
-// ModelAnimation
+// ModelAnimation, contains a full animation sequence
 typedef struct ModelAnimation {
-    int boneCount;          // Number of bones
-    int frameCount;         // Number of animation frames
-    BoneInfo *bones;        // Bones information (skeleton)
-    Transform **framePoses; // Poses array by frame
     char name[32];          // Animation name
+
+    int boneCount;          // Number of bones (per pose)
+    int keyframeCount;      // Number of animation key frames
+    ModelAnimPose *keyframePoses; // Animation sequence keyframe poses [keyframe][pose]
 } ModelAnimation;
 
 // Ray, ray for raycasting
@@ -521,7 +533,6 @@ typedef struct VrStereoConfig {
 
 // File path list
 typedef struct FilePathList {
-    unsigned int capacity;          // Filepaths max entries
     unsigned int count;             // Filepaths entries count
     char **paths;                   // Filepaths entries
 } FilePathList;
@@ -579,8 +590,7 @@ typedef enum {
 } TraceLogLevel;
 
 // Keyboard keys (US keyboard layout)
-// NOTE: Use GetKeyPressed() to allow redefining
-// required keys for alternative layouts
+// NOTE: Use GetKeyPressed() to allow redefining required keys for alternative layouts
 typedef enum {
     KEY_NULL            = 0,        // Key: NULL, used for no key pressed
     // Alphanumeric keys
@@ -780,6 +790,8 @@ typedef enum {
 #define MATERIAL_MAP_SPECULAR     MATERIAL_MAP_METALNESS
 
 // Shader location index
+// NOTE: Some locations are tried to be set automatically on shader loading,
+// but only if default attributes/uniforms names are found, check config.h for names
 typedef enum {
     SHADER_LOC_VERTEX_POSITION = 0, // Shader location: vertex attribute: position
     SHADER_LOC_VERTEX_TEXCOORD01,   // Shader location: vertex attribute: texcoord01
@@ -802,15 +814,15 @@ typedef enum {
     SHADER_LOC_MAP_ROUGHNESS,       // Shader location: sampler2d texture: roughness
     SHADER_LOC_MAP_OCCLUSION,       // Shader location: sampler2d texture: occlusion
     SHADER_LOC_MAP_EMISSION,        // Shader location: sampler2d texture: emission
-    SHADER_LOC_MAP_HEIGHT,          // Shader location: sampler2d texture: height
+    SHADER_LOC_MAP_HEIGHT,          // Shader location: sampler2d texture: heightmap
     SHADER_LOC_MAP_CUBEMAP,         // Shader location: samplerCube texture: cubemap
     SHADER_LOC_MAP_IRRADIANCE,      // Shader location: samplerCube texture: irradiance
     SHADER_LOC_MAP_PREFILTER,       // Shader location: samplerCube texture: prefilter
     SHADER_LOC_MAP_BRDF,            // Shader location: sampler2d texture: brdf
-    SHADER_LOC_VERTEX_BONEIDS,      // Shader location: vertex attribute: boneIds
-    SHADER_LOC_VERTEX_BONEWEIGHTS,  // Shader location: vertex attribute: boneWeights
-    SHADER_LOC_BONE_MATRICES,       // Shader location: array of matrices uniform: boneMatrices
-    SHADER_LOC_VERTEX_INSTANCE_TX   // Shader location: vertex attribute: instanceTransform
+    SHADER_LOC_VERTEX_BONEIDS,      // Shader location: vertex attribute: bone indices
+    SHADER_LOC_VERTEX_BONEWEIGHTS,  // Shader location: vertex attribute: bone weights
+    SHADER_LOC_MATRIX_BONETRANSFORMS, // Shader location: matrix attribute: bone transforms (animation)
+    SHADER_LOC_VERTEX_INSTANCETRANSFORMS // Shader location: vertex attribute: instance transforms
 } ShaderLocationIndex;
 
 #define SHADER_LOC_MAP_DIFFUSE      SHADER_LOC_MAP_ALBEDO
@@ -1085,47 +1097,41 @@ RLAPI Matrix GetCameraMatrix(Camera camera);                            // Get c
 RLAPI Matrix GetCameraMatrix2D(Camera2D camera);                        // Get camera 2d transform matrix
 
 // Timing-related functions
-RLAPI void SetTargetFPS(int fps);                                 // Set target FPS (maximum)
-RLAPI float GetFrameTime(void);                                   // Get time in seconds for last frame drawn (delta time)
-RLAPI double GetTime(void);                                       // Get elapsed time in seconds since InitWindow()
-RLAPI int GetFPS(void);                                           // Get current FPS
+RLAPI void SetTargetFPS(int fps);                       // Set target FPS (maximum)
+RLAPI float GetFrameTime(void);                         // Get time in seconds for last frame drawn (delta time)
+RLAPI double GetTime(void);                             // Get elapsed time in seconds since InitWindow()
+RLAPI int GetFPS(void);                                 // Get current FPS
 
 // Custom frame control functions
 // NOTE: Those functions are intended for advanced users that want full control over the frame processing
 // By default EndDrawing() does this job: draws everything + SwapScreenBuffer() + manage frame timing + PollInputEvents()
 // To avoid that behaviour and control frame processes manually, enable in config.h: SUPPORT_CUSTOM_FRAME_CONTROL
-RLAPI void SwapScreenBuffer(void);                                // Swap back buffer with front buffer (screen drawing)
-RLAPI void PollInputEvents(void);                                 // Register all input events
-RLAPI void WaitTime(double seconds);                              // Wait for some time (halt program execution)
+RLAPI void SwapScreenBuffer(void);                      // Swap back buffer with front buffer (screen drawing)
+RLAPI void PollInputEvents(void);                       // Register all input events
+RLAPI void WaitTime(double seconds);                    // Wait for some time (halt program execution)
 
 // Random values generation functions
-RLAPI void SetRandomSeed(unsigned int seed);                      // Set the seed for the random number generator
-RLAPI int GetRandomValue(int min, int max);                       // Get a random value between min and max (both included)
+RLAPI void SetRandomSeed(unsigned int seed);            // Set the seed for the random number generator
+RLAPI int GetRandomValue(int min, int max);             // Get a random value between min and max (both included)
 RLAPI int *LoadRandomSequence(unsigned int count, int min, int max); // Load random values sequence, no values repeated
-RLAPI void UnloadRandomSequence(int *sequence);                   // Unload random values sequence
+RLAPI void UnloadRandomSequence(int *sequence);         // Unload random values sequence
 
 // Misc. functions
-RLAPI void TakeScreenshot(const char *fileName);                  // Takes a screenshot of current screen (filename extension defines format)
-RLAPI void SetConfigFlags(unsigned int flags);                    // Setup init configuration flags (view FLAGS)
-RLAPI void OpenURL(const char *url);                              // Open URL with default system browser (if available)
+RLAPI void TakeScreenshot(const char *fileName);                // Takes a screenshot of current screen (filename extension defines format)
+RLAPI void SetConfigFlags(unsigned int flags);                  // Setup init configuration flags (view FLAGS)
+RLAPI void OpenURL(const char *url);                            // Open URL with default system browser (if available)
 
-// NOTE: Following functions implemented in module [utils]
-//------------------------------------------------------------------
-RLAPI void TraceLog(int logLevel, const char *text, ...);         // Show trace log messages (LOG_DEBUG, LOG_INFO, LOG_WARNING, LOG_ERROR...)
-RLAPI void SetTraceLogLevel(int logLevel);                        // Set the current threshold (minimum) log level
-RLAPI void *MemAlloc(unsigned int size);                          // Internal memory allocator
-RLAPI void *MemRealloc(void *ptr, unsigned int size);             // Internal memory reallocator
-RLAPI void MemFree(void *ptr);                                    // Internal memory free
+// Logging system
+RLAPI void SetTraceLogLevel(int logLevel);                      // Set the current threshold (minimum) log level
+RLAPI void TraceLog(int logLevel, const char *text, ...);       // Show trace log messages (LOG_DEBUG, LOG_INFO, LOG_WARNING, LOG_ERROR...)
+RLAPI void SetTraceLogCallback(TraceLogCallback callback);      // Set custom trace log
 
-// Set custom callbacks
-// WARNING: Callbacks setup is intended for advanced users
-RLAPI void SetTraceLogCallback(TraceLogCallback callback);          // Set custom trace log
-RLAPI void SetLoadFileDataCallback(LoadFileDataCallback callback);  // Set custom file binary data loader
-RLAPI void SetSaveFileDataCallback(SaveFileDataCallback callback);  // Set custom file binary data saver
-RLAPI void SetLoadFileTextCallback(LoadFileTextCallback callback);  // Set custom file text data loader
-RLAPI void SetSaveFileTextCallback(SaveFileTextCallback callback);  // Set custom file text data saver
+// Memory management, using internal allocators
+RLAPI void *MemAlloc(unsigned int size);                        // Internal memory allocator
+RLAPI void *MemRealloc(void *ptr, unsigned int size);           // Internal memory reallocator
+RLAPI void MemFree(void *ptr);                                  // Internal memory free
 
-// Files management functions
+// File system management functions
 RLAPI unsigned char *LoadFileData(const char *fileName, int *dataSize); // Load file data as byte array (read)
 RLAPI void UnloadFileData(unsigned char *data);                     // Unload file data allocated by LoadFileData()
 RLAPI bool SaveFileData(const char *fileName, void *data, int dataSize); // Save data to file from byte array (write), returns true on success
@@ -1133,9 +1139,14 @@ RLAPI bool ExportDataAsCode(const unsigned char *data, int dataSize, const char 
 RLAPI char *LoadFileText(const char *fileName);                     // Load text data from file (read), returns a '\0' terminated string
 RLAPI void UnloadFileText(char *text);                              // Unload file text data allocated by LoadFileText()
 RLAPI bool SaveFileText(const char *fileName, const char *text);    // Save text data to file (write), string must be '\0' terminated, returns true on success
-//------------------------------------------------------------------
 
-// File system functions
+// File access custom callbacks
+// WARNING: Callbacks setup is intended for advanced users
+RLAPI void SetLoadFileDataCallback(LoadFileDataCallback callback);  // Set custom file binary data loader
+RLAPI void SetSaveFileDataCallback(SaveFileDataCallback callback);  // Set custom file binary data saver
+RLAPI void SetLoadFileTextCallback(LoadFileTextCallback callback);  // Set custom file text data loader
+RLAPI void SetSaveFileTextCallback(SaveFileTextCallback callback);  // Set custom file text data saver
+
 RLAPI int FileRename(const char *fileName, const char *fileRename); // Rename file (if exists)
 RLAPI int FileRemove(const char *fileName);                         // Remove file (if exists)
 RLAPI int FileCopy(const char *srcPath, const char *dstPath);       // Copy file from one path to another, dstPath created if it doesn't exist
@@ -1155,7 +1166,7 @@ RLAPI const char *GetPrevDirectoryPath(const char *dirPath);        // Get previ
 RLAPI const char *GetWorkingDirectory(void);                        // Get current working directory (uses static string)
 RLAPI const char *GetApplicationDirectory(void);                    // Get the directory of the running application (uses static string)
 RLAPI int MakeDirectory(const char *dirPath);                       // Create directories (including full path requested), returns 0 on success
-RLAPI bool ChangeDirectory(const char *dir);                        // Change working directory, return true on success
+RLAPI bool ChangeDirectory(const char *dirPath);                    // Change working directory, return true on success
 RLAPI bool IsPathFile(const char *path);                            // Check if a given path is a file or a directory
 RLAPI bool IsFileNameValid(const char *fileName);                   // Check if fileName is valid for the platform/OS
 RLAPI FilePathList LoadDirectoryFiles(const char *dirPath);         // Load directory filepaths
@@ -1164,15 +1175,18 @@ RLAPI void UnloadDirectoryFiles(FilePathList files);                // Unload fi
 RLAPI bool IsFileDropped(void);                                     // Check if a file has been dropped into window
 RLAPI FilePathList LoadDroppedFiles(void);                          // Load dropped filepaths
 RLAPI void UnloadDroppedFiles(FilePathList files);                  // Unload dropped filepaths
+RLAPI unsigned int GetDirectoryFileCount(const char *dirPath);      // Get the file count in a directory
+RLAPI unsigned int GetDirectoryFileCountEx(const char *basePath, const char *filter, bool scanSubdirs);// Get the file count in a directory with extension filtering and recursive directory scan. Use 'DIR' in the filter string to include directories in the result
 
 // Compression/Encoding functionality
 RLAPI unsigned char *CompressData(const unsigned char *data, int dataSize, int *compDataSize);        // Compress data (DEFLATE algorithm), memory must be MemFree()
 RLAPI unsigned char *DecompressData(const unsigned char *compData, int compDataSize, int *dataSize);  // Decompress data (DEFLATE algorithm), memory must be MemFree()
 RLAPI char *EncodeDataBase64(const unsigned char *data, int dataSize, int *outputSize);               // Encode data to Base64 string (includes NULL terminator), memory must be MemFree()
 RLAPI unsigned char *DecodeDataBase64(const char *text, int *outputSize);                             // Decode Base64 string (expected NULL terminated), memory must be MemFree()
-RLAPI unsigned int ComputeCRC32(unsigned char *data, int dataSize);  // Compute CRC32 hash code
-RLAPI unsigned int *ComputeMD5(unsigned char *data, int dataSize);   // Compute MD5 hash code, returns static int[4] (16 bytes)
-RLAPI unsigned int *ComputeSHA1(unsigned char *data, int dataSize);  // Compute SHA1 hash code, returns static int[5] (20 bytes)
+RLAPI unsigned int ComputeCRC32(unsigned char *data, int dataSize);       // Compute CRC32 hash code
+RLAPI unsigned int *ComputeMD5(unsigned char *data, int dataSize);        // Compute MD5 hash code, returns static int[4] (16 bytes)
+RLAPI unsigned int *ComputeSHA1(unsigned char *data, int dataSize);       // Compute SHA1 hash code, returns static int[5] (20 bytes)
+RLAPI unsigned int *ComputeSHA256(unsigned char *data, int dataSize);     // Compute SHA256 hash code, returns static int[8] (32 bytes)
 
 // Automation events functionality
 RLAPI AutomationEventList LoadAutomationEventList(const char *fileName); // Load automation events list from file, NULL for empty list, capacity = MAX_AUTOMATION_EVENTS
@@ -1639,9 +1653,8 @@ RLAPI void SetModelMeshMaterial(Model *model, int meshId, int materialId);      
 
 // Model animations loading/unloading functions
 RLAPI ModelAnimation *LoadModelAnimations(const char *fileName, int *animCount);            // Load model animations from file
-RLAPI void UpdateModelAnimation(Model model, ModelAnimation anim, int frame);               // Update model animation pose (CPU)
-RLAPI void UpdateModelAnimationBones(Model model, ModelAnimation anim, int frame);          // Update model animation mesh bone matrices (GPU skinning)
-RLAPI void UnloadModelAnimation(ModelAnimation anim);                                       // Unload animation data
+RLAPI void UpdateModelAnimation(Model model, ModelAnimation anim, float frame);             // Update model animation pose (vertex buffers and bone matrices)
+RLAPI void UpdateModelAnimationEx(Model model, ModelAnimation animA, float frameA, ModelAnimation animB, float frameB, float blend); // Update model animation pose, blending two animations
 RLAPI void UnloadModelAnimations(ModelAnimation *animations, int animCount);                // Unload animation array data
 RLAPI bool IsModelAnimationValid(Model model, ModelAnimation anim);                         // Check model animation skeleton match
 
@@ -1675,7 +1688,7 @@ RLAPI Sound LoadSound(const char *fileName);                          // Load so
 RLAPI Sound LoadSoundFromWave(Wave wave);                             // Load sound from wave data
 RLAPI Sound LoadSoundAlias(Sound source);                             // Create a new sound that shares the same sample data as the source sound, does not own the sound data
 RLAPI bool IsSoundValid(Sound sound);                                 // Checks if a sound is valid (data loaded and buffers initialized)
-RLAPI void UpdateSound(Sound sound, const void *data, int sampleCount); // Update sound buffer with new data (data and frame count should fit in sound)
+RLAPI void UpdateSound(Sound sound, const void *data, int sampleCount); // Update sound buffer with new data (default data format: 32 bit float, stereo)
 RLAPI void UnloadWave(Wave wave);                                     // Unload wave data
 RLAPI void UnloadSound(Sound sound);                                  // Unload sound
 RLAPI void UnloadSoundAlias(Sound alias);                             // Unload a sound alias (does not deallocate sample data)
@@ -1690,7 +1703,7 @@ RLAPI void ResumeSound(Sound sound);                                  // Resume 
 RLAPI bool IsSoundPlaying(Sound sound);                               // Check if a sound is currently playing
 RLAPI void SetSoundVolume(Sound sound, float volume);                 // Set volume for a sound (1.0 is max level)
 RLAPI void SetSoundPitch(Sound sound, float pitch);                   // Set pitch for a sound (1.0 is base level)
-RLAPI void SetSoundPan(Sound sound, float pan);                       // Set pan for a sound (0.5 is center)
+RLAPI void SetSoundPan(Sound sound, float pan);                       // Set pan for a sound (-1.0 left, 0.0 center, 1.0 right)
 RLAPI Wave WaveCopy(Wave wave);                                       // Copy a wave to a new wave
 RLAPI void WaveCrop(Wave *wave, int initFrame, int finalFrame);       // Crop a wave to defined frames range
 RLAPI void WaveFormat(Wave *wave, int sampleRate, int sampleSize, int channels); // Convert wave data to desired format
@@ -1711,7 +1724,7 @@ RLAPI void ResumeMusicStream(Music music);                            // Resume 
 RLAPI void SeekMusicStream(Music music, float position);              // Seek music to a position (in seconds)
 RLAPI void SetMusicVolume(Music music, float volume);                 // Set volume for music (1.0 is max level)
 RLAPI void SetMusicPitch(Music music, float pitch);                   // Set pitch for a music (1.0 is base level)
-RLAPI void SetMusicPan(Music music, float pan);                       // Set pan for a music (0.5 is center)
+RLAPI void SetMusicPan(Music music, float pan);                       // Set pan for a music (-1.0 left, 0.0 center, 1.0 right)
 RLAPI float GetMusicTimeLength(Music music);                          // Get music time length (in seconds)
 RLAPI float GetMusicTimePlayed(Music music);                          // Get current music time played (in seconds)
 
@@ -1740,6 +1753,12 @@ RLAPI void DetachAudioStreamProcessor(AudioStream stream, AudioCallback processo
 
 RLAPI void AttachAudioMixedProcessor(AudioCallback processor); // Attach audio stream processor to the entire audio pipeline, receives frames x 2 samples as 'float' (stereo)
 RLAPI void DetachAudioMixedProcessor(AudioCallback processor); // Detach audio stream processor from the entire audio pipeline
+
+// Cameras
+
+RLAPI void CameraYaw(Camera* cameraPointer, float yaw, bool local);
+RLAPI void CameraPitch(Camera* cameraPointer, float pitch);
+RLAPI void CameraRoll(Camera* cameraPointer, float roll);
 
 #if defined(__cplusplus)
 }
